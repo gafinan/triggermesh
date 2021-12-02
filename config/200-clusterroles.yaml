@@ -216,6 +216,7 @@ rules:
 - apiGroups:
   - flow.triggermesh.io
   resources:
+  - synchronizers
   - transformations
   verbs:
   - list
@@ -226,6 +227,7 @@ rules:
   - flow.triggermesh.io
   resources:
   - transformations/status
+  - synchronizers/status
   verbs:
   - update
 # +rbac-check
@@ -345,6 +347,7 @@ rules:
   - flow.triggermesh.io
   resources:
   - transformations/finalizers
+  - synchronizers/finalizers
   verbs:
   - update
 # +rbac-check:subresource=finalizers
@@ -800,6 +803,7 @@ rules:
   - flow.triggermesh.io
   resources:
   - transformations
+  - synchronizers
   verbs:
   - get
   - list

@@ -14,19 +14,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pipeline
+package transformation
 
 import (
 	"fmt"
 	"log"
 
 	"github.com/triggermesh/triggermesh/pkg/apis/flow/v1alpha1"
-	"github.com/triggermesh/triggermesh/pkg/transformation/pipeline/common/storage"
-	"github.com/triggermesh/triggermesh/pkg/transformation/pipeline/transformer"
-	"github.com/triggermesh/triggermesh/pkg/transformation/pipeline/transformer/add"
-	"github.com/triggermesh/triggermesh/pkg/transformation/pipeline/transformer/delete"
-	"github.com/triggermesh/triggermesh/pkg/transformation/pipeline/transformer/shift"
-	"github.com/triggermesh/triggermesh/pkg/transformation/pipeline/transformer/store"
+	"github.com/triggermesh/triggermesh/pkg/flow/adapter/transformation/common/storage"
+	"github.com/triggermesh/triggermesh/pkg/flow/adapter/transformation/transformer"
+	"github.com/triggermesh/triggermesh/pkg/flow/adapter/transformation/transformer/add"
+	"github.com/triggermesh/triggermesh/pkg/flow/adapter/transformation/transformer/delete"
+	"github.com/triggermesh/triggermesh/pkg/flow/adapter/transformation/transformer/shift"
+	"github.com/triggermesh/triggermesh/pkg/flow/adapter/transformation/transformer/store"
 )
 
 // Pipeline is a set of Transformations that are

@@ -1,5 +1,5 @@
 /*
-Copyright 2020 TriggerMesh Inc.
+Copyright 2021 TriggerMesh Inc.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,17 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package transformer
+package main
 
 import (
-	"github.com/triggermesh/triggermesh/pkg/transformation/pipeline/common/storage"
+	"github.com/triggermesh/triggermesh/pkg/flow/adapter/synchronizer"
+	pkgadapter "knative.dev/eventing/pkg/adapter/v2"
 )
 
-// Transformer is an interface that contains common methods
-// to work with JSON data.
-type Transformer interface {
-	New(string, string) Transformer
-	Apply([]byte) ([]byte, error)
-	SetStorage(*storage.Storage)
-	InitStep() bool
+func main() {
+	pkgadapter.Main("synchronizer-adapter", synchronizer.EnvAccessorCtor, synchronizer.NewAdapter)
 }
