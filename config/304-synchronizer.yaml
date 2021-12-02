@@ -29,7 +29,6 @@ spec:
   names:
     kind: Synchronizer
     plural: synchronizers
-    short: sync
     categories:
     - all
     - knative
@@ -55,7 +54,7 @@ spec:
               responseCorrelationKey:
                 type: string
               responseWaitTimeout:
-                type: int
+                type: integer
               # timeoutResponsePolicy:
                 # type: object
               sink:
@@ -94,6 +93,10 @@ spec:
             type: object
             description: Reported status of the event synchronizer.
             properties:
+              sinkUri:
+                description: URI of the sink where events are currently sent to.
+                type: string
+                format: uri
               observedGeneration:
                 type: integer
                 format: int64

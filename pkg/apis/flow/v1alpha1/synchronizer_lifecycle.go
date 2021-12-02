@@ -26,7 +26,7 @@ import (
 
 // GetGroupVersionKind implements kmeta.OwnerRefable.
 func (s *Synchronizer) GetGroupVersionKind() schema.GroupVersionKind {
-	return SchemeGroupVersion.WithKind("Synchronizer Target")
+	return SchemeGroupVersion.WithKind("Synchronizer")
 }
 
 // SynchronizerCondSet is the group of possible conditions

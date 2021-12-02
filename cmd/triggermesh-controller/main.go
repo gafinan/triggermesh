@@ -19,6 +19,8 @@ package main
 import (
 	"knative.dev/pkg/injection/sharedmain"
 
+	"github.com/triggermesh/triggermesh/pkg/flow/reconciler/synchronizer"
+	"github.com/triggermesh/triggermesh/pkg/flow/reconciler/transformation"
 	"github.com/triggermesh/triggermesh/pkg/function"
 	"github.com/triggermesh/triggermesh/pkg/routing/reconciler/filter"
 	"github.com/triggermesh/triggermesh/pkg/routing/reconciler/splitter"
@@ -85,7 +87,6 @@ import (
 	"github.com/triggermesh/triggermesh/pkg/targets/reconciler/twiliotarget"
 	"github.com/triggermesh/triggermesh/pkg/targets/reconciler/uipathtarget"
 	"github.com/triggermesh/triggermesh/pkg/targets/reconciler/zendesktarget"
-	transformation "github.com/triggermesh/triggermesh/pkg/transformation/reconciler/controller"
 )
 
 func main() {
@@ -157,6 +158,7 @@ func main() {
 		zendesktarget.NewController,
 		// transformation
 		transformation.NewController,
+		synchronizer.NewController,
 		// functions
 		function.NewController,
 		// routing

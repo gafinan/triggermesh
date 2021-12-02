@@ -78,15 +78,18 @@ func newKeyGetter(jsonPath string) (ceContextParser, error) {
 			result = k.(string)
 		} else {
 			if key != "id" {
-				return "", fmt.Errorf("only \"id\" is currently supported as a unique key")
+				return "", fmt.Errorf("expected \"id\" as a unique key, got %q", key)
 			}
 			result = ceCtx.GetID()
 		}
 
-		if i2 >= len(result) {
-			return "", fmt.Errorf("selected key section is out of event key range")
+		if index > 0 {
+			if i2 >= len(result) {
+				return "", fmt.Errorf("selected key section is out of event key range")
+			}
+			return result[i1:i2], nil
 		}
 
-		return result[i1:i2], nil
+		return result, nil
 	}, nil
 }

@@ -96,30 +96,57 @@ func (a *adapter) dispatch(ctx context.Context, event cloudevents.Event) (*cloud
 }
 
 func (a *adapter) handleRequest(ctx context.Context, id string, event cloudevents.Event) (*cloudevents.Event, error) {
-	if err := a.ceClient.Send(cloudevents.ContextWithTarget(ctx, a.sinkURL), event); err != nil {
-		return nil, err
-	}
+	a.logger.Infof("Handling request %q", id)
 
 	resultChan := a.sessions.add(id)
+
+	go func() {
+		if res := a.ceClient.Send(cloudevents.ContextWithTarget(ctx, a.sinkURL), event); cloudevents.IsUndelivered(res) {
+			a.logger.Errorf("Unable to forward the request: %v", res)
+			a.sessions.delete(id)
+		}
+	}()
+
+	a.logger.Infof("Request forwarded to %q", a.sinkURL)
+
 	t := time.NewTimer(time.Duration(a.responseTimeout) * time.Second)
 	defer t.Stop()
 
+	a.logger.Infof("Waiting response for %q", id)
+
 	select {
 	case result := <-resultChan:
-		return result, nil
+		if result == nil {
+			a.logger.Infof("Nil response for %q", id)
+			return nil, nil
+		}
+		a.logger.Infof("Received response for %q: %+v", id, result)
+		return result, cloudevents.ResultACK
 	case <-t.C:
+		a.logger.Errorf("Request %q timed out", id)
 		return nil, fmt.Errorf("timeout")
 	}
 }
 
 func (a *adapter) handleResponse(ctx context.Context, correlationID string, event cloudevents.Event) (*cloudevents.Event, error) {
+	a.logger.Infof("Handling response %q", correlationID)
+
 	responseChan, exists := a.sessions.get(correlationID)
 	if !exists {
+		a.logger.Errorf("Session for %q does not exist or expired", correlationID)
 		return nil, fmt.Errorf("session expired")
 	}
 
-	responseChan <- &event
-	a.sessions.delete(correlationID)
+	a.logger.Infof("Forwarding response %q", correlationID)
 
-	return nil, nil
+	select {
+	case responseChan <- &event:
+		a.sessions.delete(correlationID)
+	default:
+		a.logger.Errorf("Unable to forward the response %q", correlationID)
+	}
+
+	a.logger.Infof("Response %q completed", correlationID)
+
+	return nil, cloudevents.ResultACK
 }
