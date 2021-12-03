@@ -23,13 +23,18 @@ import (
 )
 
 type storage struct {
-	sync.RWMutex
-	sessions map[string]chan *cloudevents.Event
+	sync.Mutex
+	sessions map[string]channel
+}
+
+type channel struct {
+	sync.Mutex
+	c chan *cloudevents.Event
 }
 
 func newStorage() *storage {
 	return &storage{
-		sessions: make(map[string]chan *cloudevents.Event),
+		sessions: make(map[string]channel),
 	}
 }
 
@@ -37,23 +42,39 @@ func (s *storage) add(id string) <-chan *cloudevents.Event {
 	s.Lock()
 	defer s.Unlock()
 
-	c := make(chan *cloudevents.Event)
-	s.sessions[id] = c
-	return c
-}
-
-func (s *storage) get(id string) (chan *cloudevents.Event, bool) {
-	s.RLock()
-	defer s.RUnlock()
-
-	c, exists := s.sessions[id]
-	return c, exists
+	respChan := make(chan *cloudevents.Event)
+	s.sessions[id] = channel{
+		c: respChan,
+	}
+	return respChan
 }
 
 func (s *storage) delete(id string) {
 	s.Lock()
 	defer s.Unlock()
 
+	session, exists := s.sessions[id]
+	if !exists {
+		return
+	}
+	session.Lock()
+	defer session.Unlock()
+
 	delete(s.sessions, id)
-	close(s.sessions[id])
+	close(session.c)
+}
+
+func (s *storage) open(id string) (chan<- *cloudevents.Event, bool) {
+	respChan, exists := s.sessions[id]
+	if exists {
+		respChan.Lock()
+	}
+	return respChan.c, exists
+}
+
+func (s *storage) close(id string) {
+	respChan, exists := s.sessions[id]
+	if exists {
+		respChan.Unlock()
+	}
 }
