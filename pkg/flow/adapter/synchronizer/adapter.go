@@ -18,6 +18,7 @@ package synchronizer
 
 import (
 	"context"
+	"net/http"
 	"time"
 
 	"go.uber.org/zap"
@@ -90,8 +91,8 @@ func (a *adapter) dispatch(ctx context.Context, event cloudevents.Event) (*cloud
 	}
 }
 
-func (a *adapter) handleRequest(ctx context.Context, id string, event cloudevents.Event) (*cloudevents.Event, error) {
-	a.logger.Infof("Handling request %q", id)
+func (a *adapter) handleRequest(ctx context.Context, id string, event cloudevents.Event) (*cloudevents.Event, cloudevents.Result) {
+	a.logger.Debugf("Handling request %q", id)
 
 	respChan := a.sessions.add(id)
 
@@ -104,50 +105,50 @@ func (a *adapter) handleRequest(ctx context.Context, id string, event cloudevent
 		}
 	}(sendErr)
 
-	a.logger.Infof("Request forwarded to %q", a.sinkURL)
+	a.logger.Debugf("Request forwarded to %q", a.sinkURL)
 
 	t := time.NewTimer(time.Duration(a.responseTimeout) * time.Second)
 	defer t.Stop()
 
-	a.logger.Infof("Waiting response for %q", id)
+	a.logger.Debugf("Waiting response for %q", id)
 
 	select {
 	case err := <-sendErr:
 		a.logger.Errorf("Unable to forward the request: %v", err)
 		a.sessions.delete(id)
-		return nil, cloudevents.ResultNACK
+		return nil, cloudevents.NewHTTPResult(http.StatusBadGateway, "unable to forward the request: %v", err)
 	case result := <-respChan:
 		if result == nil {
 			a.logger.Errorf("No response from %q", id)
-			return nil, cloudevents.ResultNACK
+			return nil, cloudevents.NewHTTPResult(http.StatusInternalServerError, "failed to communicate the response")
 		}
-		a.logger.Infof("Received response for %q: %+v", id, result)
+		a.logger.Debugf("Received response for %q", id)
 		return result, cloudevents.ResultACK
 	case <-t.C:
 		a.logger.Errorf("Request %q timed out", id)
-		return nil, cloudevents.ResultNACK
+		return nil, cloudevents.NewHTTPResult(http.StatusGatewayTimeout, "backend did not respond in time")
 	}
 }
 
-func (a *adapter) handleResponse(ctx context.Context, correlationID string, event cloudevents.Event) (*cloudevents.Event, error) {
-	a.logger.Infof("Handling response %q", correlationID)
+func (a *adapter) handleResponse(ctx context.Context, correlationID string, event cloudevents.Event) (*cloudevents.Event, cloudevents.Result) {
+	a.logger.Debugf("Handling response %q", correlationID)
 
 	responseChan, exists := a.sessions.open(correlationID)
 	if !exists {
 		a.logger.Errorf("Session for %q does not exist", correlationID)
-		return nil, cloudevents.ResultNACK
+		return nil, cloudevents.NewHTTPResult(http.StatusInternalServerError, "client session does not exist")
 	}
 	defer a.sessions.close(correlationID)
 
-	a.logger.Infof("Forwarding response %q", correlationID)
+	a.logger.Debugf("Forwarding response %q", correlationID)
 
 	select {
 	case responseChan <- &event:
 		a.sessions.delete(correlationID)
-		a.logger.Infof("Response %q complete", correlationID)
+		a.logger.Debugf("Response %q complete", correlationID)
 		return nil, cloudevents.ResultACK
 	default:
 		a.logger.Errorf("Unable to forward the response %q", correlationID)
-		return nil, cloudevents.ResultNACK
+		return nil, cloudevents.NewHTTPResult(http.StatusBadGateway, "response channel closed")
 	}
 }
