@@ -75,8 +75,9 @@ func (a *adapter) Start(ctx context.Context) error {
 func (a *adapter) dispatch(ctx context.Context, event cloudevents.Event) (*cloudevents.Event, cloudevents.Result) {
 	correlationID, err := a.responseKey(event.Context)
 	if err != nil {
-		a.logger.Warnf("Event correlation ID: %v", err)
-	} else {
+		a.logger.Errorf("Cannot parse correlation ID: %v", err)
+		return nil, err
+	} else if correlationID != "" {
 		return a.handleResponse(ctx, correlationID, event)
 	}
 
@@ -94,12 +95,14 @@ func (a *adapter) handleRequest(ctx context.Context, id string, event cloudevent
 
 	respChan := a.sessions.add(id)
 
-	go func() {
+	sendErr := make(chan error)
+	defer close(sendErr)
+
+	go func(errChan chan error) {
 		if res := a.ceClient.Send(cloudevents.ContextWithTarget(ctx, a.sinkURL), event); cloudevents.IsUndelivered(res) {
-			a.logger.Errorf("Unable to forward the request: %v", res)
-			// a.sessions.delete(id)
+			errChan <- res
 		}
-	}()
+	}(sendErr)
 
 	a.logger.Infof("Request forwarded to %q", a.sinkURL)
 
@@ -109,10 +112,14 @@ func (a *adapter) handleRequest(ctx context.Context, id string, event cloudevent
 	a.logger.Infof("Waiting response for %q", id)
 
 	select {
+	case err := <-sendErr:
+		a.logger.Errorf("Unable to forward the request: %v", err)
+		a.sessions.delete(id)
+		return nil, cloudevents.ResultNACK
 	case result := <-respChan:
 		if result == nil {
-			a.logger.Infof("Nil response for %q", id)
-			return nil, nil
+			a.logger.Errorf("No response from %q", id)
+			return nil, cloudevents.ResultNACK
 		}
 		a.logger.Infof("Received response for %q: %+v", id, result)
 		return result, cloudevents.ResultACK

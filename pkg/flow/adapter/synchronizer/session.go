@@ -29,7 +29,7 @@ type storage struct {
 
 type channel struct {
 	sync.Mutex
-	c chan *cloudevents.Event
+	responses chan *cloudevents.Event
 }
 
 func newStorage() *storage {
@@ -42,11 +42,11 @@ func (s *storage) add(id string) <-chan *cloudevents.Event {
 	s.Lock()
 	defer s.Unlock()
 
-	respChan := make(chan *cloudevents.Event)
+	c := make(chan *cloudevents.Event)
 	s.sessions[id] = channel{
-		c: respChan,
+		responses: c,
 	}
-	return respChan
+	return c
 }
 
 func (s *storage) delete(id string) {
@@ -61,20 +61,20 @@ func (s *storage) delete(id string) {
 	defer session.Unlock()
 
 	delete(s.sessions, id)
-	close(session.c)
+	close(session.responses)
 }
 
 func (s *storage) open(id string) (chan<- *cloudevents.Event, bool) {
-	respChan, exists := s.sessions[id]
+	c, exists := s.sessions[id]
 	if exists {
-		respChan.Lock()
+		c.Lock()
 	}
-	return respChan.c, exists
+	return c.responses, exists
 }
 
 func (s *storage) close(id string) {
-	respChan, exists := s.sessions[id]
+	c, exists := s.sessions[id]
 	if exists {
-		respChan.Unlock()
+		c.Unlock()
 	}
 }

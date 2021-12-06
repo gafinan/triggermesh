@@ -73,7 +73,7 @@ func newKeyGetter(jsonPath string) (ceContextParser, error) {
 		if extensions {
 			k, err := ceCtx.GetExtension(key)
 			if err != nil {
-				return "", fmt.Errorf("cannot get extension: %w", err)
+				return "", nil
 			}
 			result = k.(string)
 		} else {
