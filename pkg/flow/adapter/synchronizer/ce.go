@@ -53,7 +53,7 @@ func newKeyGetter(jsonPath string) (ceContextParser, error) {
 	i2 := len(key) - 1
 	index := strings.Index(key, "[")
 	if index > 0 {
-		section := key[index+1 : len(key)-2]
+		section := key[index+1 : len(key)-1]
 		indices := strings.Split(section, ":")
 		if i1, err = strconv.Atoi(indices[0]); err != nil {
 			return nil, fmt.Errorf("failed to parse key index %q: %w", indices[0], err)
@@ -62,9 +62,9 @@ func newKeyGetter(jsonPath string) (ceContextParser, error) {
 			return nil, fmt.Errorf("failed to parse key index %q: %w", indices[1], err)
 		}
 		if i1 < 0 || i2 < 0 || i1 >= i2 {
-			return nil, fmt.Errorf("indecies %d:%d are not valid", i1, i2)
+			return nil, fmt.Errorf("indices %d:%d are not valid", i1, i2)
 		}
-		key = key[:index-1]
+		key = key[:index]
 	}
 
 	return func(ceCtx event.EventContext) (string, error) {
@@ -73,7 +73,7 @@ func newKeyGetter(jsonPath string) (ceContextParser, error) {
 		if extensions {
 			k, err := ceCtx.GetExtension(key)
 			if err != nil {
-				return "", nil
+				return "", err
 			}
 			result = k.(string)
 		} else {

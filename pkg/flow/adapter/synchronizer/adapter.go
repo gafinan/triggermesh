@@ -74,10 +74,11 @@ func (a *adapter) Start(ctx context.Context) error {
 }
 
 func (a *adapter) dispatch(ctx context.Context, event cloudevents.Event) (*cloudevents.Event, cloudevents.Result) {
+	a.logger.Debugf("Received the event: %s", event.String())
+
 	correlationID, err := a.responseKey(event.Context)
 	if err != nil {
-		a.logger.Errorf("Cannot parse correlation ID: %v", err)
-		return nil, err
+		a.logger.Debugf("Correlation key is not set: %v", err)
 	} else if correlationID != "" {
 		return a.handleResponse(ctx, correlationID, event)
 	}
