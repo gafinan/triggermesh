@@ -24,18 +24,24 @@ import (
 	"go.uber.org/zap"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/cloudevents/sdk-go/v2/event"
 	pkgadapter "knative.dev/eventing/pkg/adapter/v2"
 	"knative.dev/pkg/logging"
 )
 
 var _ pkgadapter.Adapter = (*adapter)(nil)
 
+type correlationKey interface {
+	get(event.EventContext) (string, error)
+	set(*event.EventContext) (string, error)
+}
+
 type adapter struct {
 	ceClient cloudevents.Client
 	logger   *zap.SugaredLogger
 
-	requestKey      ceContextParser
-	responseKey     ceContextParser
+	requestKey      correlationKey
+	responseKey     correlationKey
 	responseTimeout int
 
 	sessions *storage
@@ -47,20 +53,21 @@ func NewAdapter(ctx context.Context, envAcc pkgadapter.EnvConfigAccessor, ceClie
 	env := envAcc.(*envAccessor)
 	logger := logging.FromContext(ctx)
 
-	requestParser, err := newKeyGetter(env.RequestKey)
+	requestCorrelationKey, err := newKey(env.RequestKey)
 	if err != nil {
 		panic(err)
 	}
-	responseParser, err := newKeyGetter(env.ResponseCorrelationKey)
+	responseCorrelationKey, err := newKey(env.ResponseCorrelationKey)
 	if err != nil {
 		panic(err)
 	}
 
 	return &adapter{
-		ceClient:        ceClient,
-		logger:          logger,
-		requestKey:      requestParser,
-		responseKey:     responseParser,
+		ceClient:    ceClient,
+		logger:      logger,
+		requestKey:  requestCorrelationKey,
+		responseKey: responseCorrelationKey,
+
 		responseTimeout: env.ResponseWaitTimeout,
 		sessions:        newStorage(),
 		sinkURL:         env.Sink,
@@ -76,20 +83,26 @@ func (a *adapter) Start(ctx context.Context) error {
 func (a *adapter) dispatch(ctx context.Context, event cloudevents.Event) (*cloudevents.Event, cloudevents.Result) {
 	a.logger.Debugf("Received the event: %s", event.String())
 
-	correlationID, err := a.responseKey(event.Context)
+	correlationID, err := a.responseKey.get(event.Context)
 	if err != nil {
 		a.logger.Debugf("Correlation key is not set: %v", err)
 	} else if correlationID != "" {
 		return a.handleResponse(ctx, correlationID, event)
 	}
 
-	eventID, err := a.requestKey(event.Context)
+	eventID, err := a.requestKey.get(event.Context)
 	if err != nil {
-		a.logger.Errorf("Cannot parse request ID: %v", err)
+		a.logger.Errorf("Cannot get request key: %v", err)
 		return nil, err
-	} else {
-		return a.handleRequest(ctx, eventID, event)
 	}
+	if eventID == "" {
+		eventID, err = a.requestKey.set(&event.Context)
+		if err != nil {
+			a.logger.Errorf("Cannot set request key: %v", err)
+			return nil, err
+		}
+	}
+	return a.handleRequest(ctx, eventID, event)
 }
 
 func (a *adapter) handleRequest(ctx context.Context, id string, event cloudevents.Event) (*cloudevents.Event, cloudevents.Result) {

@@ -22,74 +22,97 @@ import (
 	"strings"
 
 	"github.com/cloudevents/sdk-go/v2/event"
+	"github.com/google/uuid"
 )
 
 const ceExtensionsKey = "extensions"
 
-type ceContextParser func(event.EventContext) (string, error)
+type key struct {
+	extensions bool
+	path       string
+	indices    []int
+}
 
-func newKeyGetter(jsonPath string) (ceContextParser, error) {
-	var extensions bool
-	var key string
-	var err error
+func newKey(jsonPath string) (*key, error) {
+	result := &key{
+		indices: make([]int, 0, 2),
+	}
 
 	// parse key path
 	parts := strings.Split(jsonPath, ".")
 	switch len(parts) {
 	case 1:
-		key = parts[0]
+		result.path = parts[0]
 	case 2:
 		if parts[0] != ceExtensionsKey {
-			return nil, fmt.Errorf("expected path is %q, got %q", ceExtensionsKey, parts[0])
+			return result, fmt.Errorf("only %q is supported as a key nested path, got %q", ceExtensionsKey, parts[0])
 		}
-		key = parts[1]
-		extensions = true
+		result.path = parts[1]
+		result.extensions = true
 	default:
-		return nil, fmt.Errorf("key path %q is not supported", jsonPath)
+		return result, fmt.Errorf("key path %q is not supported", jsonPath)
 	}
 
 	// parse key indices
-	i1 := 0
-	i2 := len(key) - 1
-	index := strings.Index(key, "[")
+	index := strings.Index(result.path, "[")
 	if index > 0 {
-		section := key[index+1 : len(key)-1]
-		indices := strings.Split(section, ":")
-		if i1, err = strconv.Atoi(indices[0]); err != nil {
-			return nil, fmt.Errorf("failed to parse key index %q: %w", indices[0], err)
+		indicesSuffix := result.path[index+1 : len(result.path)-1]
+		indices := strings.Split(indicesSuffix, ":")
+		i1, err := strconv.Atoi(indices[0])
+		if err != nil {
+			return result, fmt.Errorf("failed to parse key index %q: %w", indices[0], err)
 		}
-		if i2, err = strconv.Atoi(indices[1]); err != nil {
-			return nil, fmt.Errorf("failed to parse key index %q: %w", indices[1], err)
+		i2, err := strconv.Atoi(indices[1])
+		if err != nil {
+			return result, fmt.Errorf("failed to parse key index %q: %w", indices[1], err)
 		}
 		if i1 < 0 || i2 < 0 || i1 >= i2 {
-			return nil, fmt.Errorf("indices %d:%d are not valid", i1, i2)
+			return result, fmt.Errorf("indices %d:%d are not valid", i1, i2)
 		}
-		key = key[:index]
+		result.indices = []int{i1, i2}
+		result.path = result.path[:index]
 	}
 
-	return func(ceCtx event.EventContext) (string, error) {
-		var result string
+	if !result.extensions && result.path != "id" {
+		return result, fmt.Errorf("correlation keys other than \"id\" are not unique, hence not supported: %q", result.path)
+	}
 
-		if extensions {
-			k, err := ceCtx.GetExtension(key)
-			if err != nil {
-				return "", err
-			}
-			result = k.(string)
-		} else {
-			if key != "id" {
-				return "", fmt.Errorf("expected \"id\" as a unique key, got %q", key)
-			}
-			result = ceCtx.GetID()
+	return result, nil
+}
+
+func (k *key) get(ceCtx event.EventContext) (string, error) {
+	var value string
+
+	if k.extensions {
+		k, err := ceCtx.GetExtension(k.path)
+		if err != nil {
+			return "", nil
 		}
+		value = k.(string)
+	} else {
+		value = ceCtx.GetID()
+	}
 
-		if index > 0 {
-			if i2 >= len(result) {
-				return "", fmt.Errorf("selected key section is out of event key range")
-			}
-			return result[i1:i2], nil
+	if len(k.indices) == 2 {
+		if k.indices[1] >= len(value) {
+			return "", fmt.Errorf("key size is out of event value range: %d > %d", k.indices[1], len(value))
 		}
+		return value[k.indices[0]:k.indices[1]], nil
+	}
+	return value, nil
+}
 
-		return result, nil
-	}, nil
+func (k *key) set(ceCtx *event.EventContext) (string, error) {
+	id := uuid.NewString()
+	if len(k.indices) == 2 {
+		id = id[k.indices[0]:k.indices[1]]
+	}
+	if k.extensions {
+		c := *ceCtx
+		if err := c.SetExtension(k.path, id); err != nil {
+			return "", err
+		}
+		ceCtx = &c
+	}
+	return id, nil
 }
