@@ -29,7 +29,7 @@ import (
 	tmcommon "github.com/triggermesh/triggermesh/pkg/targets/reconciler/common"
 	"github.com/triggermesh/triggermesh/pkg/targets/reconciler/resources"
 
-	"github.com/triggermesh/ibm-mq-target/pkg/apis/targets/v1alpha1"
+	"github.com/triggermesh/triggermesh/pkg/apis/targets/v1alpha1"
 )
 
 const (

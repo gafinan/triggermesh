@@ -14,7 +14,8 @@ ENV CGO_CFLAGS="-I$MQ_INSTALLATION_PATH/inc"
 WORKDIR /go/triggermesh
 COPY . .
 
-RUN go build -v -o ibmmqsource-adapter ./triggermesh/cmd/ibmmqsource-adapter 
+RUN go build -v -o ibmmqsource-adapter ./cmd/ibmmqsource-adapter 
+
 
 FROM debian:buster-slim
 

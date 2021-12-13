@@ -11,7 +11,7 @@ ENV CGO_LDFLAGS_ALLOW="-Wl,-rpath.*"
 ENV CGO_LDFLAGS="-L$MQ_INSTALLATION_PATH/lib64 -Wl,-rpath,$MQ_INSTALLATION_PATH/lib64"
 ENV CGO_CFLAGS="-I$MQ_INSTALLATION_PATH/inc"
 
-WORKDIR /go/ibm-mq-target
+WORKDIR /go/triggermesh
 COPY . .
 
 RUN go build -v -o ibmmqtarget-adapter ./cmd/ibmmqtarget-adapter 
@@ -21,6 +21,6 @@ FROM debian:buster-slim
 
 WORKDIR /opt/mqm/
 COPY --from=0 /opt/mqm .
-COPY --from=0 /go/ibm-mq-target/ibmmqtarget-adapter .
+COPY --from=0 /go/triggermesh/ibmmqtarget-adapter .
 
 ENTRYPOINT ["./ibmmqtarget-adapter"]
