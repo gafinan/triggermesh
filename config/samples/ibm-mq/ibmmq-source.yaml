@@ -1,0 +1,23 @@
+apiVersion: sources.triggermesh.io/v1alpha1
+kind: IBMMQSource
+metadata:
+  name: ibm-mq-source
+spec:
+  connectionName: ibm-mq.default.svc.cluster.local(1414)
+  queueManager: QM1
+  queueName: DEV.QUEUE.2
+  channelName: DEV.APP.SVRCONN
+  credentials:
+    username:
+      valueFromSecret:
+        name: ibm-mq-secret
+        key: password
+    password:
+      valueFromSecret:
+        name: ibm-mq-secret
+        key: password
+  sink:
+    ref:
+      apiVersion: serving.knative.dev/v1
+      kind: Service
+      name: sockeye

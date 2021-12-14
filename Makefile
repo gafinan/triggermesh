@@ -21,6 +21,10 @@ OUTPUT_DIR        ?= $(BASE_DIR)/_output
 # Dynamically generate the list of commands based on the directory name cited in the cmd directory
 COMMANDS          := $(notdir $(wildcard cmd/*))
 
+# Commands and images that require custom build proccess
+CUSTOM_BUILD_BINARIES := confluenttarget-adapter ibmmqsource-adapter ibmmqtarget-adapter xslttransform-adapter
+CUSTOM_BUILD_IMAGES	  := ibmmqsource-adapter ibmmqtarget-adapter
+
 BIN_OUTPUT_DIR    ?= $(OUTPUT_DIR)
 DOCS_OUTPUT_DIR   ?= $(OUTPUT_DIR)
 TEST_OUTPUT_DIR   ?= $(OUTPUT_DIR)
@@ -68,7 +72,7 @@ help: ## Display this help
 
 build: $(COMMANDS)  ## Build all artifacts
 
-$(filter-out confluenttarget-adapter xslttransform-adapter, $(COMMANDS)): ## Build artifact
+$(filter-out $(CUSTOM_BUILD_BINARIES), $(COMMANDS)): ## Build artifact
 	$(GO) build -ldflags "$(LDFLAGS_STATIC)" -o $(BIN_OUTPUT_DIR)/$@ ./cmd/$@
 
 confluenttarget-adapter:
@@ -114,10 +118,16 @@ fmt: ## Format source files
 fmt-test: ## Check source formatting
 	@test -z $(shell $(GOFMT) -l $(shell $(GO) list -f '{{$$d := .Dir}}{{range .GoFiles}}{{$$d}}/{{.}} {{end}} {{$$d := .Dir}}{{range .TestGoFiles}}{{$$d}}/{{.}} {{end}}' $(GOPKGS)))
 
-IMAGES = $(foreach cmd,$(COMMANDS),$(cmd).image)
-images: $(IMAGES) ## Build container images
-$(IMAGES): %.image:
+KO_PUBLISHABLE = $(filter-out $(CUSTOM_BUILD_IMAGES), $(COMMANDS))
+KO_IMAGES = $(foreach cmd,$(KO_PUBLISHABLE),$(cmd).image)
+CUSTOM_IMAGES = $(foreach cmd,$(CUSTOM_BUILD_IMAGES),$(cmd).image)
+
+images: $(KO_IMAGES) $(CUSTOM_IMAGES) ## Build container images
+$(KO_IMAGES): %.image:
 	$(KO) publish --push=false -B --tag-only -t $(IMAGE_TAG) ./cmd/$*
+
+$(CUSTOM_IMAGES): %.image:
+	@$(MAKE) -C ./cmd/$* image CONTEXT=$(BASE_DIR) IMAGE_TAG=$*:$(IMAGE_TAG) 
 
 clean: ## Clean build artifacts
 	@for bin in $(COMMANDS) ; do \

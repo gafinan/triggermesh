@@ -1,4 +1,4 @@
-FROM golang:buster
+FROM golang:bullseye as builder
 
 RUN apt-get update && \
     apt-get install -y curl && \
@@ -17,10 +17,12 @@ COPY . .
 RUN go build -v -o ibmmqsource-adapter ./cmd/ibmmqsource-adapter 
 
 
-FROM debian:buster-slim
+FROM gcr.io/distroless/base:nonroot
 
 WORKDIR /opt/mqm/
-COPY --from=0 /opt/mqm .
-COPY --from=0 /go/triggermesh/ibmmqsource-adapter .
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libstdc++.so.6 /usr/lib/x86_64-linux-gnu/
+COPY --from=builder /lib/x86_64-linux-gnu/libgcc_s.so.1 /lib/x86_64-linux-gnu/
+COPY --from=builder /opt/mqm .
+COPY --from=builder /go/triggermesh/ibmmqsource-adapter .
 
 ENTRYPOINT ["./ibmmqsource-adapter"]
