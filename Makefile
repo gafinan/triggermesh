@@ -50,6 +50,11 @@ LDFLAGS_STATIC     = $(LDFLAGS) -extldflags=-static
 HAS_GOTESTSUM     := $(shell command -v gotestsum;)
 HAS_GOLANGCI_LINT := $(shell command -v golangci-lint;)
 
+SED				  := sed -i
+ifeq ($(shell sh -c 'uname 2>/dev/null || echo Unknown'),Darwin) 
+    SED		  	  += ''
+endif
+
 .PHONY: help all build release vm-images test lint fmt fmt-test images clean install-gotestsum install-golangci-lint deploy undeploy
 
 .DEFAULT_GOAL := build
@@ -82,10 +87,18 @@ confluenttarget-adapter:
 xslttransform-adapter: ## Builds XML related functionality
 	CGO_ENABLED=1 $(GO) build -ldflags "$(LDFLAGS)" -o $(BIN_OUTPUT_DIR)/$@ ./cmd/$@
 
-deploy: ## Deploy TriggerMesh stack to default Kubernetes cluster using ko
-	$(KO) apply -f $(BASE_DIR)/config
+deploy: ## Deploy TriggerMesh stack to default Kubernetes cluster
+	$(KO) resolve -f $(BASE_DIR)/config > $(BASE_DIR)/triggermesh-$(IMAGE_TAG).yaml
+	@for component in $(CUSTOM_BUILD_IMAGES) ; do \
+		$(MAKE) -C ./cmd/$$component build CONTEXT=$(BASE_DIR) IMAGE_TAG=$(KO_DOCKER_REPO)/$$component-$(IMAGE_TAG) && \
+		$(MAKE) -C ./cmd/$$component push IMAGE_TAG=$(KO_DOCKER_REPO)/$$component-$(IMAGE_TAG) && \
+		$(SED) 's/'$$component':.*/'$$component'-$(IMAGE_TAG)/g' $(BASE_DIR)/triggermesh-$(IMAGE_TAG).yaml || exit 1; \
+	done
 
-undeploy: ## Remove TriggerMesh stack from default Kubernetes cluster using ko
+	$(KO) apply -f $(BASE_DIR)/triggermesh-$(IMAGE_TAG).yaml
+	@rm $(BASE_DIR)/triggermesh-$(IMAGE_TAG).yaml
+
+undeploy: ## Remove TriggerMesh stack from default Kubernetes cluster
 	$(KO) delete -f $(BASE_DIR)/config
 
 vm-images:
@@ -97,6 +110,13 @@ release: ## Publish container images and generate release manifests
 	@cp config/namespace/100-namespace.yaml $(DIST_DIR)/triggermesh.yaml
 	$(KO) resolve $(KOFLAGS) -B -t latest -f config/ -l '!triggermesh.io/crd-install' > /dev/null
 	$(KO) resolve $(KOFLAGS) -B -t $(IMAGE_TAG) --tag-only -f config/ -l '!triggermesh.io/crd-install' >> $(DIST_DIR)/triggermesh.yaml
+	
+	@for component in $(CUSTOM_BUILD_IMAGES) ; do \
+		$(MAKE) -C ./cmd/$$component build CONTEXT=$(BASE_DIR) IMAGE_TAG=$(KO_DOCKER_REPO)/$$component:$(IMAGE_TAG) && \
+		$(MAKE) -C ./cmd/$$component tag IMAGE_TAG=$(KO_DOCKER_REPO)/$$component:$(IMAGE_TAG) TAGS=$(KO_DOCKER_REPO)/$$component:latest && \
+		$(MAKE) -C ./cmd/$$component push IMAGE_TAG=$(KO_DOCKER_REPO)/$$component && \
+		$(SED) 's/'$$component':.*/'$$component':$(IMAGE_TAG)/g' $(DIST_DIR)/triggermesh.yaml || exit 1; \
+	done
 
 gen-apidocs: ## Generate API docs
 	GOPATH="" OUTPUT_DIR=$(DOCS_OUTPUT_DIR) ./hack/gen-api-reference-docs.sh
@@ -118,16 +138,16 @@ fmt: ## Format source files
 fmt-test: ## Check source formatting
 	@test -z $(shell $(GOFMT) -l $(shell $(GO) list -f '{{$$d := .Dir}}{{range .GoFiles}}{{$$d}}/{{.}} {{end}} {{$$d := .Dir}}{{range .TestGoFiles}}{{$$d}}/{{.}} {{end}}' $(GOPKGS)))
 
-KO_PUBLISHABLE = $(filter-out $(CUSTOM_BUILD_IMAGES), $(COMMANDS))
-KO_IMAGES = $(foreach cmd,$(KO_PUBLISHABLE),$(cmd).image)
-CUSTOM_IMAGES = $(foreach cmd,$(CUSTOM_BUILD_IMAGES),$(cmd).image)
+KO_PUBLISHABLE 	   = $(filter-out $(CUSTOM_BUILD_IMAGES), $(COMMANDS))
+KO_IMAGES 		   = $(foreach cmd,$(KO_PUBLISHABLE),$(cmd).image)
+CUSTOM_IMAGES 	   = $(foreach cmd,$(CUSTOM_BUILD_IMAGES),$(cmd).image)
 
 images: $(KO_IMAGES) $(CUSTOM_IMAGES) ## Build container images
 $(KO_IMAGES): %.image:
 	$(KO) publish --push=false -B --tag-only -t $(IMAGE_TAG) ./cmd/$*
 
 $(CUSTOM_IMAGES): %.image:
-	@$(MAKE) -C ./cmd/$* image CONTEXT=$(BASE_DIR) IMAGE_TAG=$*:$(IMAGE_TAG) 
+	@$(MAKE) -C ./cmd/$* image CONTEXT=$(BASE_DIR) IMAGE_TAG=$(KO_DOCKER_REPO)/$*:$(IMAGE_TAG)
 
 clean: ## Clean build artifacts
 	@for bin in $(COMMANDS) ; do \

@@ -34,16 +34,12 @@ import (
 )
 
 const (
-	adapterName = "ibmmqtarget"
-
 	envQueueManager   = "QUEUE_MANAGER"
 	envChannelName    = "CHANNEL_NAME"
 	envConnectionName = "CONNECTION_NAME"
 	envUser           = "USER"
 	envPassword       = "PASSWORD"
 	envQueueName      = "QUEUE_NAME"
-
-	envEventsPayloadPolicy = "EVENTS_PAYLOAD_POLICY"
 )
 
 // adapterConfig contains properties used to configure the target's adapter.

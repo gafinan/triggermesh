@@ -1,9 +1,14 @@
 DOCKER		?= docker
 PLATFORM 	?= linux/amd64
-GOALS		:= image
+GOALS		:= build tag push
 
 .PHONY: $(GOALS)
 
-image:
+build:
 	$(DOCKER) build -t $(IMAGE_TAG) -f Dockerfile $(CONTEXT) --platform $(PLATFORM)
-	$(DOCKER) push $(IMAGE_TAG)
+
+tag:
+	$(DOCKER) tag $(IMAGE_TAG) $(TAGS)
+
+push:
+	$(DOCKER) push --all-tags $(IMAGE_TAG)
