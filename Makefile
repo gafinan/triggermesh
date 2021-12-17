@@ -36,6 +36,8 @@ KO                ?= ko
 KOFLAGS           ?=
 IMAGE_TAG         ?= $(shell git rev-parse HEAD)
 
+GIT               ?= git
+
 # Go build variables
 GO                ?= go
 GOFMT             ?= gofmt
@@ -43,7 +45,8 @@ GOLINT            ?= golangci-lint run --timeout 5m
 GOTOOL            ?= go tool
 GOTEST            ?= gotestsum --junitfile $(TEST_OUTPUT_DIR)/$(KREPO)-unit-tests.xml --format pkgname-and-test-fails --
 
-GOPKGS             = ./cmd/... ./pkg/apis/... ./pkg/function/... ./pkg/routing/... ./pkg/sources/... ./pkg/targets/... ./pkg/transformation/...
+GOPKGS             = ./cmd/... ./pkg/apis/... ./pkg/function/... ./pkg/routing/... ./pkg/flow/... ./pkg/sources/... ./pkg/targets/... ./pkg/transformation/...
+GOPKGS_SKIP_TESTS  = ./cmd/ibmmqtarget-adapter ./cmd/ibmmqsource-adapter ./pkg/targets/adapter/ibmmqtarget ./pkg/sources/adapter/ibmmqsource
 LDFLAGS            = -w -s
 LDFLAGS_STATIC     = $(LDFLAGS) -extldflags=-static
 
@@ -89,7 +92,7 @@ xslttransform-adapter: ## Builds XML related functionality
 
 deploy: ## Deploy TriggerMesh stack to default Kubernetes cluster
 	$(KO) resolve -f $(BASE_DIR)/config > $(BASE_DIR)/triggermesh-$(IMAGE_TAG).yaml
-	@for component in $(CUSTOM_BUILD_IMAGES) ; do \
+	@for component in $(CUSTOM_BUILD_IMAGES); do \
 		$(MAKE) -C ./cmd/$$component build CONTEXT=$(BASE_DIR) IMAGE_TAG=$(KO_DOCKER_REPO)/$$component-$(IMAGE_TAG) && \
 		$(MAKE) -C ./cmd/$$component push IMAGE_TAG=$(KO_DOCKER_REPO)/$$component-$(IMAGE_TAG) && \
 		$(SED) 's/'$$component':.*/'$$component'-$(IMAGE_TAG)/g' $(BASE_DIR)/triggermesh-$(IMAGE_TAG).yaml || exit 1; \
@@ -111,7 +114,7 @@ release: ## Publish container images and generate release manifests
 	$(KO) resolve $(KOFLAGS) -B -t latest -f config/ -l '!triggermesh.io/crd-install' > /dev/null
 	$(KO) resolve $(KOFLAGS) -B -t $(IMAGE_TAG) --tag-only -f config/ -l '!triggermesh.io/crd-install' >> $(DIST_DIR)/triggermesh.yaml
 	
-	@for component in $(CUSTOM_BUILD_IMAGES) ; do \
+	@for component in $(CUSTOM_BUILD_IMAGES); do \
 		$(MAKE) -C ./cmd/$$component build CONTEXT=$(BASE_DIR) IMAGE_TAG=$(KO_DOCKER_REPO)/$$component:$(IMAGE_TAG) && \
 		$(MAKE) -C ./cmd/$$component tag IMAGE_TAG=$(KO_DOCKER_REPO)/$$component:$(IMAGE_TAG) TAGS=$(KO_DOCKER_REPO)/$$component:latest && \
 		$(MAKE) -C ./cmd/$$component push IMAGE_TAG=$(KO_DOCKER_REPO)/$$component && \
@@ -123,7 +126,9 @@ gen-apidocs: ## Generate API docs
 
 test: install-gotestsum ## Run unit tests
 	@mkdir -p $(TEST_OUTPUT_DIR)
+	@rm -rf ./$(GOPKGS_SKIP_TESTS)
 	$(GOTEST) -p=1 -race -cover -coverprofile=$(TEST_OUTPUT_DIR)/$(KREPO)-c.out $(GOPKGS)
+	$(GIT) checkout $(GOPKGS_SKIP_TESTS)
 
 cover: test ## Generate code coverage
 	@mkdir -p $(COVER_OUTPUT_DIR)
